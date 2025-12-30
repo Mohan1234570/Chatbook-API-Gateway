@@ -1,0 +1,71 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: chatbook-gateway
+
+  redis:
+    host: localhost
+    port: 6379
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8083/.well-known/jwks.json
+
+  cloud:
+    gateway:
+
+      # 🔥 RateLimiter fix
+      filter:
+        request-rate-limiter:
+          enabled: true
+          deny-empty-key: true
+          include-headers: false   # 🚑 prevents ReadOnlyHttpHeaders error
+
+      # 🔹 Global filters
+      default-filters:
+        - RemoveRequestHeader=Cookie
+
+      routes:
+
+        # 🔹 Chatbook / Post Service
+        - id: post-service
+          uri: http://localhost:8084
+          predicates:
+            - Path=/api/chatbook/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userTenantKeyResolver}"
+
+        # 🔹 Notification REST Service
+        - id: notification-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/notifs/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 50
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userTenantKeyResolver}"
+
+        # 🔹 Notification WebSocket
+        - id: notification-ws
+          uri: ws://localhost:8082
+          predicates:
+            - Path=/ws/notifications
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.cloud.gateway: DEBUG
