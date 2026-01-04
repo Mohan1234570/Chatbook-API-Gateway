@@ -16,26 +16,34 @@ public class SecurityConfig {
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
 
-        http
+        return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
+
                 .authorizeExchange(auth -> auth
+
+                        // Public endpoints (NO JWT)
                         .pathMatchers(
-                                "/auth/**",
-                                "/.well-known/jwks.json",
+                                "/api/auth/**",
                                 "/actuator/**"
                         ).permitAll()
 
                         .pathMatchers("/api/chatbook/**").hasRole("USER")
+                        .pathMatchers("/api/notifs/**").hasRole("USER")
 
+                        // WebSocket handshake
+                        .pathMatchers("/ws/**").authenticated()
+
+                        // Everything else
                         .anyExchange().authenticated()
                 )
-                .oauth2ResourceServer(oauth ->
-                        oauth.jwt(jwt ->
-                                jwt.jwtAuthenticationConverter(jwtAuthConverter())
+
+                // JWT validation at Gateway
+                .oauth2ResourceServer(oauth -> oauth
+                        .jwt(jwt -> jwt
+                                .jwtAuthenticationConverter(jwtAuthConverter())
                         )
-                );
+                )
 
-        return http.build();
+                .build();
     }
-
 }
